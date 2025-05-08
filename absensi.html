@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Presensi Lokasi</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    </head>
+    <body>
+        <div class="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+            <div class="w-full max-w-2xl bg-white shadow-xl rounded-xl p-8 space-y-6">
+                <!-- Loading Indicator -->
+                <div id="loading" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                    <div class="bg-white p-4 rounded-lg">Memuat...</div>
+                </div>
+
+                <!-- Error Messages -->
+                <div id="lokasi-error" class="hidden text-center text-red-600 p-4">
+                    <h1 class="text-xl font-bold">Anda tidak berada di lokasi acara</h1>
+                    <p class="text-sm">Silakan datang ke lokasi yang ditentukan untuk melakukan presensi</p>
+                </div>
+
+                <!-- Form -->
+                <div id="formContainer">
+                    <h1 class="text-2xl font-bold text-center mb-6">Absensi Construct Statistik</h1>
+                    <form id="presensiForm" class="space-y-4">
+                        <!-- Input fields tetap sama -->
+                        <!-- ... (bagian input fields sama seperti sebelumnya) ... -->
+
+                        <!-- Submit Button -->
+                        <button
+                            type="button"
+                            onclick="kirimData()"
+                            class="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition"
+                        >
+                            SUBMIT
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            const url = "https://script.google.com/macros/s/AKfycbzrF0-F2SvtJ9N6o0KlMbzuScfZFUVhYO6orFRUue_VZRV-GXhu_J9PmE3V7DnE8dey/exec";
+            let KOORDINAT_LOKASI = { latitude: -6.201081, longitude: 106.781006 }; // Contoh koordinat
+            let TOLERANSI_JARAK = 0.0005; // Contoh toleransi
+
+            // Event Listeners
+            document.getElementById("btnUpload").addEventListener("click", handlePhotoUpload);
+            document.getElementById("foto").addEventListener("change", handleImagePreview);
+
+            // Inisialisasi
+            window.onload = async () => {
+                showLoading();
+                await getKoordinat();
+                cekLokasi();
+                hideLoading();
+            };
+
+            async function getKoordinat() {
+                try {
+                    const response = await fetch(`${url}?action=getKoordinat`);
+                    const data = await response.json();
+                    KOORDINAT_LOKASI = {
+                        latitude: parseFloat(data.latitude),
+                        longitude: parseFloat(data.longitude),
+                    };
+                    TOLERANSI_JARAK = parseFloat(data.toleransi);
+                } catch (error) {
+                    Swal.fire("Error", "Gagal mengambil data koordinat", "error");
+                }
+            }
+
+            function cekLokasi() {
+                if (!navigator.geolocation) {
+                    Swal.fire("Error", "Browser tidak mendukung geolocation", "error");
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                    (position) => handleLocationSuccess(position),
+                    (error) => handleLocationError(error),
+                    { timeout: 10000 }
+                );
+            }
+
+            function handleLocationSuccess(position) {
+                const { latitude, longitude } = position.coords;
+                const jarak = calculateDistance(latitude, longitude, KOORDINAT_LOKASI.latitude, KOORDINAT_LOKASI.longitude);
+
+                if (jarak > TOLERANSI_JARAK) {
+                    document.getElementById("formContainer").classList.add("hidden");
+                    document.getElementById("lokasi-error").classList.remove("hidden");
+                }
+            }
+
+            function calculateDistance(lat1, lon1, lat2, lon2) {
+                // Perhitungan jarak Haversine
+                const R = 6371e3; // Earth radius in meters
+                const φ1 = (lat1 * Math.PI) / 180;
+                const φ2 = (lat2 * Math.PI) / 180;
+                const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+                const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+                const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+                return R * c; // Jarak dalam meter
+            }
+
+            async function kirimData() {
+                // Validasi input
+                if (!validateForm()) return;
+
+                try {
+                    showLoading();
+                    const formData = await prepareFormData();
+
+                    const response = await fetch(url, {
+                        method: "POST",
+                        body: formData,
+                    });
+
+                    const result = await response.json();
+                    handleSubmissionResult(result);
+                } catch (error) {
+                    Swal.fire("Error", "Gagal mengirim data", "error");
+                } finally {
+                    hideLoading();
+                }
+            }
+
+            function validateForm() {
+                // Validasi lengkap semua field
+                const nim = document.getElementById("nim").value;
+                const noHP = document.getElementById("noHP").value;
+                const email = document.getElementById("email").value;
+
+                if (!/^\d{10}$/.test(nim)) {
+                    Swal.fire("Error", "NIM harus 10 digit angka", "error");
+                    return false;
+                }
+
+                if (!/^\d{10,13}$/.test(noHP)) {
+                    Swal.fire("Error", "Nomor HP tidak valid", "error");
+                    return false;
+                }
+
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                    Swal.fire("Error", "Format email tidak valid", "error");
+                    return false;
+                }
+
+                return true;
+            }
+
+            async function prepareFormData() {
+                const formData = new FormData();
+                formData.append("action", "create");
+
+                // Tambahkan semua field
+                ["nama", "nim", "noHP", "email", "catatan"].forEach((field) => {
+                    formData.append(field, document.getElementById(field).value.trim());
+                });
+
+                // Konversi foto ke base64
+                const foto = document.getElementById("foto").files[0];
+                const base64 = await convertToBase64(foto);
+                formData.append("foto", base64);
+
+                return formData;
+            }
+
+            function handleSubmissionResult(result) {
+                if (result.success) {
+                    Swal.fire("Success", "Data berhasil dikirim", "success");
+                    document.getElementById("presensiForm").reset();
+                    document.getElementById("previewImage").classList.add("hidden");
+                } else {
+                    Swal.fire("Error", result.message || "Gagal mengirim data", "error");
+                }
+            }
+
+            // Helper functions
+            function showLoading() {
+                document.getElementById("loading").classList.remove("hidden");
+            }
+
+            function hideLoading() {
+                document.getElementById("loading").classList.add("hidden");
+            }
+
+            function convertToBase64(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result.split(",")[1]);
+                    reader.onerror = (error) => reject(error);
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            function handlePhotoUpload() {
+                Swal.fire({
+                    title: "Perhatian!",
+                    text: "Foto harus menunjukkan wajah dan latar lokasi dengan jelas",
+                    icon: "warning",
+                }).then(() => document.getElementById("foto").click());
+            }
+
+            function handleImagePreview(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const preview = document.getElementById("previewImage");
+                    preview.src = e.target.result;
+                    preview.classList.remove("hidden");
+                };
+                reader.readAsDataURL(file);
+            }
+
+            function handleLocationError(error) {
+                let message = "Error mengambil lokasi: ";
+                switch (error.code) {
+                    case error.PERMISSION_DENIED:
+                        message += "Izin lokasi ditolak";
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        message += "Informasi lokasi tidak tersedia";
+                        break;
+                    case error.TIMEOUT:
+                        message += "Permintaan lokasi timeout";
+                        break;
+                    default:
+                        message += "Error tidak diketahui";
+                }
+                Swal.fire("Error", message, "error");
+            }
+        </script>
+    </body>
+</html>

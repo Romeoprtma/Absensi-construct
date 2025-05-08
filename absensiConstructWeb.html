@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <script src="https://cdn.tailwindcss.com"></script>
+        <title>Presensi Lokasi</title>
+        <style>
+            /* fonts.css */
+            @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap");
+
+            .font-poppins {
+                font-family: "Poppins", sans-serif;
+            }
+
+            #loading {
+                display: none; /* Default hidden */
+                justify-content: center;
+                align-items: center;
+                flex-direction: column;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(255, 255, 255); /* Transparansi background */
+                z-index: 999;
+            }
+
+            #loading.active {
+                display: flex;
+            }
+
+            /* HTML: <div class="loader"></div> */
+            .loader {
+                width: 90px;
+                height: 14px;
+                --c: #4ed7f1 92%, #0000;
+                background: radial-gradient(circle closest-side, var(--c)) calc(100% / -4) 0,
+                    radial-gradient(circle closest-side, var(--c)) calc(100% / 4) 0;
+                background-size: calc(100% / 2) 100%;
+                animation: l14 1.5s infinite;
+            }
+            @keyframes l14 {
+                0% {
+                    background-position: calc(100% / -4) 0, calc(100% / 4) 0;
+                }
+                50% {
+                    background-position: calc(100% / -4) -14px, calc(100% / 4) 14px;
+                }
+                100% {
+                    background-position: calc(100% / 4) -14px, calc(3 * 100% / 4) 14px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <h1 class="text-center text-2xl font-bold mt-11">Absensi Construct</h1>
+        <div class="container-body font-poppins bg-[#f8f9fa] flex justify-center items-center h-[100vh] px-[20px]">
+            <div class="container-content flex flex-col justify-center items-center">
+                <div id="loading">
+                    <div class="loader"></div>
+                </div>
+
+                <div>
+                    <h1 id="h1-content1" class="h1-content1 text-center mt-[200px] hidden">You not in area</h1>
+                </div>
+                <div>
+                    <h1 id="h1-content2" class="h1-content2 text-center mt-[200px] hidden">Izinkan Lokasi Terlebih Dahulu</h1>
+                </div>
+                <div
+                    class="form-container bg-white w-full max-w-[600px] p-[30px] rounded-[8px] shadow-[0_4px_8px_rgba(0,0,0,0.2)]"
+                    id="formContainer"
+                >
+                    <form id="presensiForm">
+                        <p class="mb-3">Nama</p>
+                        <input
+                            class="w-full h-[45px] border-2 border-gray-300 outline-none rounded-none text-[16px] text-left bg-white px-3 transition-all duration-400 ease-in-out focus:border-blue-400"
+                            type="text"
+                            id="nama"
+                            required
+                        />
+
+                        <p class="mb-3">NIM</p>
+                        <input
+                            class="w-full h-[45px] border-2 border-gray-300 outline-none rounded-none text-[16px] text-left bg-white px-3 transition-all duration-400 ease-in-out focus:border-blue-400"
+                            type="text"
+                            id="nim"
+                            required
+                        />
+
+                        <p class="mb-3">No HP</p>
+                        <input
+                            class="w-full h-[45px] border-2 border-gray-300 outline-none rounded-none text-[16px] text-left bg-white px-3 transition-all duration-400 ease-in-out focus:border-blue-400"
+                            type="text"
+                            id="noHP"
+                            required
+                        />
+
+                        <p class="mb-3">Foto</p>
+                        <!-- <label style="padding-top: 0"><em>Photo</em></label> -->
+                        <label style="padding-top: 0"
+                            ><em>Foto selfie individu (bukan kelompok) yang memperlihatkan wajah jelas serta latar lokasi acara</em></label
+                        >
+
+                        <!-- Tombol pengganti input file -->
+                        <button
+                            class="input-foto mt-5 w-full py-3 bg-[#60b5ff] text-white text-base rounded cursor-pointer hover:bg-[#155ab5]"
+                            type="button"
+                            id="btnUpload"
+                        >
+                            Pilih Foto
+                        </button>
+
+                        <!-- Input file yang disembunyikan -->
+                        <input type="file" id="foto" accept="image/*" capture="environment" required style="display: none" />
+
+                        <!-- Tempat preview foto -->
+                        <div style="margin-top: 10px">
+                            <img
+                                id="previewImage"
+                                src=""
+                                alt="masukkan gambar"
+                                style="max-width: 200px; display: none; border: 1px solid #ccc; padding: 5px; border-radius: 5px"
+                            />
+                        </div>
+
+                        <button class="mt-5 w-full py-3 bg-[#1a73e8] text-white text-base rounded cursor-pointer" type="button" onclick="kirimData()">
+                            SUBMIT
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+        <script>
+            const url = "https://script.google.com/macros/s/AKfycbw52p5j3Oy-I_HDb26dQ2E40vKQamQbLaik0uII0uvxt7J3-qnySiCtwkeErP52Udas/exec"; // Ganti dengan URL Web App dari Apps Script
+            let KOORDINAT_LOKASI = { latitude: 0, longitude: 0 };
+            let TOLERANSI_JARAK = 0;
+
+            // Tampilkan loading saat halaman dimuat
+            window.onload = function () {
+                document.getElementById("loading").classList.add("active");
+                cekLokasi(); // Panggil fungsi cek lokasi seperti sebelumnya
+            };
+
+            document.getElementById("btnUpload").addEventListener("click", function () {
+                Swal.fire({
+                    title: "WAJIB DIBACA!",
+                    text: "Jika foto wajah tidak terlihat jelas dengan latar acara, maka kehadiran tidak dianggap.",
+                    icon: "warning",
+                    confirmButtonText: "Oke, Saya Mengerti",
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        document.getElementById("foto").click(); // trigger input file setelah user tekan OK
+                    }
+                });
+            });
+
+            // Preview image setelah memilih file
+            document.getElementById("foto").addEventListener("change", function () {
+                const file = this.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function (e) {
+                        const previewImage = document.getElementById("previewImage");
+                        previewImage.src = e.target.result;
+                        previewImage.style.display = "block";
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            // Fungsi async untuk ambil koordinat dari Apps Script
+            async function getKoordinat() {
+                try {
+                    const response = await fetch(`${url}?action=getKoordinat`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    KOORDINAT_LOKASI = {
+                        latitude: parseFloat(data.latitude),
+                        longitude: parseFloat(data.longitude),
+                    };
+                    TOLERANSI_JARAK = parseFloat(data.toleransi);
+                    console.log("Data Koordinat:", data);
+                    console.log("Data Toleransi Jarak:", TOLERANSI_JARAK);
+
+                    // Setelah koordinat diambil, baru cek lokasi
+                    cekLokasi();
+                } catch (error) {
+                    document.getElementById("koordinat").textContent = "Gagal mengambil data.";
+                    console.error("Fetch error:", error);
+                    document.getElementById("loading").classList.remove("active");
+                }
+            }
+
+            // Fungsi untuk mengecek apakah pengguna berada di lokasi yang benar
+            function cekLokasi() {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (posisi) => {
+                            const { latitude, longitude } = posisi.coords;
+                            const jarak = Math.sqrt(
+                                Math.pow(latitude - KOORDINAT_LOKASI.latitude, 2) + Math.pow(longitude - KOORDINAT_LOKASI.longitude, 2)
+                            );
+                            if (jarak <= TOLERANSI_JARAK) {
+                                document.getElementById("formContainer").style.display = "block";
+                            } else {
+                                document.getElementById("h1-content1").style.display = "block";
+                                Swal.fire("ANDA TIDAK BERADA DI LOKASI ACARA");
+                            }
+                            document.getElementById("loading").classList.remove("active");
+                        },
+                        (error) => {
+                            handleLocationError(error);
+                            document.getElementById("loading").classList.remove("active");
+                        }
+                    );
+                } else {
+                    alert("Perangkat tidak mendukung akses lokasi.");
+                    document.getElementById("loading").classList.remove("active");
+                }
+            }
+
+            // Jalankan saat halaman dimuat
+            window.onload = function () {
+                document.getElementById("loading").classList.add("active");
+                getKoordinat(); // Hanya panggil ini, dan biarkan fungsi ini memanggil cekLokasi()
+            };
+
+            async function kirimData() {
+                // Validasi input wajib diisi
+                const nama = document.getElementById("nama").value.trim();
+                const nim = document.getElementById("nim").value.trim();
+                const noHP = document.getElementById("noHP").value.trim();
+                //   const email = document.getElementById("email").value.trim();
+                //   const catatan = document.getElementById("catatan").value.trim();
+                const foto = document.getElementById("foto").files[0];
+
+                if (!nama || !nim || !noHP || !foto) {
+                    // Jika ada field kosong, munculkan alert
+                    Swal.fire({
+                        icon: "warning",
+                        title: "Input Tidak Lengkap",
+                        text: "Semua kolom wajib diisi!",
+                    });
+                    return; // Hentikan eksekusi jika input tidak valid
+                }
+
+                if (isNaN(nim)) {
+                    Swal.fire({
+                        icon: "warning",
+                        title: "NIM Tidak Valid",
+                        text: "NIM harus berupa angka!",
+                    });
+                    return;
+                }
+
+                // Tampilkan loading saat submit
+                document.getElementById("loading").classList.add("active");
+
+                // Konversi foto ke Base64
+                const base64Foto = await convertToBase64(foto);
+
+                // Siapkan form data
+                const formData = new FormData();
+                formData.append("action", "create");
+                formData.append("nama", nama);
+                formData.append("nim", nim);
+                formData.append("noHP", noHP);
+                formData.append("foto", base64Foto);
+
+                try {
+                    // Kirim data ke server
+                    const response = await fetch(url, {
+                        method: "POST",
+                        body: formData,
+                    });
+                    const result = await response.json();
+                    Swal.fire({
+                        icon: result.success ? "success" : "success",
+                        title: result.success ? "Berhasil" : "Berhasil",
+                        text: result.message,
+                    });
+                    document.getElementById("presensiForm").reset();
+                    // Kosongkan preview image (misalnya <img id="previewImage">)
+                    const previewImage = document.getElementById("previewImage");
+                    if (previewImage) {
+                        previewImage.src = "";
+                        previewImage.style.display = "none";
+                    }
+                } catch (error) {
+                    console.error("Error:", error);
+                    Swal.fire({
+                        icon: "error",
+                        title: "Gagal Mengirim Data",
+                        text: "Terjadi kesalahan saat mengirim data.",
+                    });
+                } finally {
+                    // Sembunyikan loading setelah submit selesai
+                    document.getElementById("loading").classList.remove("active");
+                }
+            }
+
+            // Fungsi konversi file ke Base64
+            function convertToBase64(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = (error) => reject(error);
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            function handleLocationError(error) {
+                if (error.code === error.PERMISSION_DENIED) {
+                    Swal.fire({
+                        title: "Akses lokasi diperlukan untuk presensi.",
+                        showCancelButton: true,
+                        confirmButtonText: "Izinkan",
+                        cancelButtonText: "Batal",
+                    }).then((result) => {
+                        if (result.isConfirmed) resetIzinLokasi();
+                    });
+                } else if (error.code === error.POSITION_UNAVAILABLE) {
+                    document.getElementById("h1-content2").style.display = "block";
+                    Swal.fire("Lokasi tidak dapat diakses. Pastikan fitur lokasi diaktifkan pada perangkat Anda.");
+                } else if (error.code === error.TIMEOUT) {
+                    document.getElementById("h1-content2").style.display = "block";
+                    Swal.fire("Permintaan lokasi timeout. Coba lagi.");
+                } else {
+                    document.getElementById("h1-content2").style.display = "block";
+                    Swal.fire("Terjadi kesalahan. Coba lagi.");
+                }
+            }
+
+            function resetIzinLokasi() {
+                document.getElementById("h1-content2").style.display = "block";
+                Swal.fire({
+                    title: "Wajib memberikan izin lokasi untuk mengisi presensi.",
+                    html: `
+                                    1. Klik icon info halaman di kolom URL browser Anda<br>
+                                    2. Aktifkan perizinan lokasi
+                                `,
+                    imageUrl: "http://feb.mercubuana.ac.id/wp-content/uploads/2024/11/setting.png",
+                    imageWidth: 200,
+                    imageHeight: 200,
+                    imageAlt: "Custom image",
+                });
+            }
+
+            function convertToBase64(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result.split(",")[1]);
+                    reader.onerror = (error) => reject(error);
+                    reader.readAsDataURL(file);
+                });
+            }
+        </script>
+    </body>
+</html>
